@@ -111,7 +111,7 @@ class DeepBellNet(nn.Module):
             self.activations.append(act_fn)
         
         self.output_layer = nn.Linear(layer_dims[-2], layer_dims[-1])
-        self.to(device)  # 把 LayerNorm 等也搬到 GPU
+        self.to(device)
     def forward(self, x):
         for bell, norm, dropout, act in zip(
             self.bell_layers, self.norms, self.dropouts, self.activations
