@@ -62,7 +62,7 @@ class DeepBellNet(nn.Module):
         self, 
         layer_dims,
         n_groups=3,
-        n_dim=100,
+        n_dim=4,
         dropout=0.01,
         use_batch_norm=False,
         use_layer_norm=True,
