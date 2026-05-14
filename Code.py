@@ -24,7 +24,7 @@ class BellLayer(nn.Module):
         self.dim_expand = nn.Parameter(
             torch.randn(in_dim, n_dim, device=device) * 0.1 / np.sqrt(in_dim)
         )
-        self.dim_bias = nn.Parameter(torch.zeros(in_dim, n_dim, device=device))
+        self.dim_bias = nn.Parameter(torch.zeros(n_dim, device=device))
         
         self.c = nn.Parameter(torch.randn(out_dim, n_groups, n_dim, device=device) * 0.5)
         self.p = nn.Parameter(torch.zeros(out_dim, n_groups, n_dim, device=device))
@@ -36,9 +36,9 @@ class BellLayer(nn.Module):
         p = torch.exp(self.p) + 1e-6
         k = torch.exp(self.k) + 1e-6
         
-        x_expanded = x.unsqueeze(-1) * self.dim_expand.unsqueeze(0) + self.dim_bias.unsqueeze(0)
+        x_expanded = torch.matmul(x, self.dim_expand) + self.dim_bias
         
-        diff = x_expanded.unsqueeze(2).unsqueeze(2) - self.c.view(1, 1, self.out_dim, self.n_groups, self.n_dim)
+        diff = x_expanded.unsqueeze(1).unsqueeze(1) - self.c.unsqueeze(0)
         p_exp = p.view(1, 1, self.out_dim, self.n_groups, self.n_dim)
         
         R = 1.0 / (diff.pow(2) * p_exp.pow(2) + 1.0)
