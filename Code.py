@@ -39,10 +39,10 @@ class BellLayer(nn.Module):
         x_expanded = torch.matmul(x, self.dim_expand) + self.dim_bias
         
         diff = x_expanded.unsqueeze(1).unsqueeze(1) - self.c.unsqueeze(0)
-        p_exp = p.view(1, 1, self.out_dim, self.n_groups, self.n_dim)
+        p_exp = p.unsqueeze(0)
         
         R = 1.0 / (diff.pow(2) * p_exp.pow(2) + 1.0)
-        k_exp = k.view(1, 1, self.out_dim, self.n_groups, self.n_dim)
+        k_exp = k.unsqueeze(0)
         R_weighted = R * k_exp.pow(2)
         
         R_sum = R_weighted.sum(dim=-1, keepdim=True).sum(dim=-2, keepdim=True)
@@ -51,7 +51,7 @@ class BellLayer(nn.Module):
         
         W_exp = self.W.unsqueeze(0)
         x_exp = x.unsqueeze(1).unsqueeze(-1)
-        alpha_exp = alpha_reduced.permute(0, 2, 1, 3)
+        alpha_exp = alpha_reduced.unsqueeze(2)
         
         out = (x_exp * W_exp * alpha_exp).sum(dim=2).sum(dim=-1) + self.bias
         return out
