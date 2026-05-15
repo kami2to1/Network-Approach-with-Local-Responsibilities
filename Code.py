@@ -14,18 +14,20 @@ class BellLayer(nn.Module):
         self.in_dim = in_dim
         self.out_dim = out_dim
         self.n_groups = n_groups
-        self.n_dim = n_dim
+        self.n_dim = n_dim  # per-group dimension
         
         self.W = nn.Parameter(
             torch.randn(out_dim, in_dim, n_groups, device=device) * 0.1 / np.sqrt(in_dim)
         )
         self.bias = nn.Parameter(torch.zeros(out_dim, device=device))
         
+        # Per-group dimension expansion: [in_dim, n_groups * n_dim]
         self.dim_expand = nn.Parameter(
-            torch.randn(in_dim, n_dim, device=device) * 0.1 / np.sqrt(in_dim)
+            torch.randn(in_dim, n_groups, n_dim, device=device) * 0.1 / np.sqrt(in_dim)
         )
-        self.dim_bias = nn.Parameter(torch.zeros(n_dim, device=device))
+        self.dim_bias = nn.Parameter(torch.zeros(n_groups, n_dim, device=device))
         
+        # Per-group, per-dimension parameters
         self.c = nn.Parameter(torch.randn(out_dim, n_groups, n_dim, device=device) * 0.5)
         self.p = nn.Parameter(torch.zeros(out_dim, n_groups, n_dim, device=device))
         self.k = nn.Parameter(torch.zeros(out_dim, n_groups, n_dim, device=device))
@@ -36,22 +38,25 @@ class BellLayer(nn.Module):
         p = torch.exp(self.p) + 1e-6
         k = torch.exp(self.k) + 1e-6
         
-        x_expanded = torch.matmul(x, self.dim_expand) + self.dim_bias
+        # Expand to per-group dimensions: [batch, n_groups, n_dim]
+        x_expanded = torch.einsum('bi,igj->bgj', x, self.dim_expand) + self.dim_bias.unsqueeze(0)
         
-        diff = x_expanded.unsqueeze(1).unsqueeze(1) - self.c.unsqueeze(0)
+        # diff: [batch, out_dim, n_groups, n_dim]
+        diff = x_expanded.unsqueeze(1) - self.c.unsqueeze(0)
         p_exp = p.unsqueeze(0)
         
         R = 1.0 / (diff.pow(2) * p_exp.pow(2) + 1.0)
         k_exp = k.unsqueeze(0)
         R_weighted = R * k_exp.pow(2)
         
-        R_sum = R_weighted.sum(dim=-1, keepdim=True).sum(dim=-2, keepdim=True)
+        # Sum over dimension to get group-level weights
+        R_sum = R_weighted.sum(dim=-1, keepdim=True)
         alpha = R_weighted / (R_sum + 1e-8)
-        alpha_reduced = alpha.sum(dim=-1)
+        alpha_reduced = alpha.sum(dim=-1)  # [batch, out_dim, n_groups]
         
-        W_exp = self.W.unsqueeze(0)
-        x_exp = x.unsqueeze(1).unsqueeze(-1)
-        alpha_exp = alpha_reduced.unsqueeze(2)
+        W_exp = self.W.unsqueeze(0)  # [1, out_dim, in_dim, n_groups]
+        x_exp = x.unsqueeze(1).unsqueeze(-1)  # [batch, 1, in_dim, 1]
+        alpha_exp = alpha_reduced.unsqueeze(2)  # [batch, out_dim, 1, n_groups]
         
         out = (x_exp * W_exp * alpha_exp).sum(dim=2).sum(dim=-1) + self.bias
         return out
@@ -112,6 +117,7 @@ class DeepBellNet(nn.Module):
         
         self.output_layer = nn.Linear(layer_dims[-2], layer_dims[-1])
         self.to(device)
+    
     def forward(self, x):
         for bell, norm, dropout, act in zip(
             self.bell_layers, self.norms, self.dropouts, self.activations
@@ -131,4 +137,3 @@ class DeepBellNet(nn.Module):
     
     def count_parameters(self):
         return sum(p.numel() for p in self.parameters() if p.requires_grad)
-
